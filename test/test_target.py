@@ -7,12 +7,11 @@ from datetime import datetime
 import boto3
 import numpy as np
 import pandas as pd
-from gokart.file_processor import _ChunkedLargeFileReader
-from gokart.redis_lock import RedisParams
 from matplotlib import pyplot
 from moto import mock_s3
 
-from gokart.target import make_target, make_model_target
+from gokart.file_processor import _ChunkedLargeFileReader
+from gokart.target.target_on_kart import make_target, make_model_target
 
 
 def _get_temporary_directory():

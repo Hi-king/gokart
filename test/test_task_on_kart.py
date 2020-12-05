@@ -10,7 +10,7 @@ from luigi.util import inherits
 import gokart
 from gokart.parameter import TaskInstanceParameter, ListTaskInstanceParameter
 from gokart.file_processor import XmlFileProcessor
-from gokart.target import TargetOnKart, SingleFileTarget, ModelTarget
+from gokart.target.target_on_kart import TargetOnKart, SingleFileTarget, ModelTarget
 
 
 class _DummyTask(gokart.TaskOnKart):

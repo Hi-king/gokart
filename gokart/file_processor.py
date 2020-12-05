@@ -48,7 +48,7 @@ class BinaryFileProcessor(FileProcessor):
     def load(self, file):
         return file.read()
 
-    def dump(self, obj, file):
+    def dump(self, obj: bytes, file):
         file.write(obj)
 
 

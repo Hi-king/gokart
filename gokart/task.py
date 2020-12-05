@@ -12,7 +12,7 @@ import gokart
 from gokart.file_processor import FileProcessor
 from gokart.pandas_type_config import PandasTypeConfigMap
 from gokart.parameter import TaskInstanceParameter, ListTaskInstanceParameter
-from gokart.target import TargetOnKart
+from gokart.target.target_on_kart import TargetOnKart
 
 logger = getLogger(__name__)
 
@@ -32,25 +32,36 @@ class TaskOnKart(luigi.Task):
     workspace_directory = luigi.Parameter(default='./resources/',
                                           description='A directory to set outputs on. Please use a path starts with s3:// when you use s3.',
                                           significant=False)  # type: str
-    local_temporary_directory = luigi.Parameter(default='./resources/tmp/', description='A directory to save temporary files.', significant=False)  # type: str
-    rerun = luigi.BoolParameter(default=False, description='If this is true, this task will run even if all output files exist.', significant=False)
+    local_temporary_directory = luigi.Parameter(default='./resources/tmp/',
+                                                description='A directory to save temporary files.',
+                                                significant=False)  # type: str
+    rerun = luigi.BoolParameter(default=False,
+                                description='If this is true, this task will run even if all output files exist.',
+                                significant=False)
     strict_check = luigi.BoolParameter(default=False,
                                        description='If this is true, this task will not run only if all input and output files exist.',
                                        significant=False)
     modification_time_check = luigi.BoolParameter(default=False,
                                                   description='If this is true, this task will not run only if all input and output files exist,'
-                                                  ' and all input files are modified before output file are modified.',
+                                                              ' and all input files are modified before output file are modified.',
                                                   significant=False)
-    delete_unnecessary_output_files = luigi.BoolParameter(default=False, description='If this is true, delete unnecessary output files.', significant=False)
+    delete_unnecessary_output_files = luigi.BoolParameter(default=False,
+                                                          description='If this is true, delete unnecessary output files.',
+                                                          significant=False)
     significant = luigi.BoolParameter(default=True,
                                       description='If this is false, this task is not treated as a part of dependent tasks for the unique id.',
                                       significant=False)
-    fix_random_seed_methods = luigi.ListParameter(default=['random.seed', 'numpy.random.seed'], description='Fix random seed method list.', significant=False)
-    fix_random_seed_value = luigi.IntParameter(default=None, description='Fix random seed method value.', significant=False)
+    fix_random_seed_methods = luigi.ListParameter(default=['random.seed', 'numpy.random.seed'],
+                                                  description='Fix random seed method list.', significant=False)
+    fix_random_seed_value = luigi.IntParameter(default=None, description='Fix random seed method value.',
+                                               significant=False)
 
-    redis_host = luigi.Parameter(default=None, description='Task lock check is deactivated, when None.', significant=False)
-    redis_port = luigi.Parameter(default=None, description='Task lock check is deactivated, when None.', significant=False)
-    redis_timeout = luigi.IntParameter(default=180, description='Redis lock will be released after `redis_timeout` seconds')
+    redis_host = luigi.Parameter(default=None, description='Task lock check is deactivated, when None.',
+                                 significant=False)
+    redis_port = luigi.Parameter(default=None, description='Task lock check is deactivated, when None.',
+                                 significant=False)
+    redis_timeout = luigi.IntParameter(default=180,
+                                       description='Redis lock will be released after `redis_timeout` seconds')
 
     def __init__(self, *args, **kwargs):
         self._add_configuration(kwargs, 'TaskOnKart')
@@ -94,7 +105,8 @@ class TaskOnKart(luigi.Task):
         if self.strict_check or self.modification_time_check:
             requirements = luigi.task.flatten(self.requires())
             inputs = luigi.task.flatten(self.input())
-            is_completed = is_completed and all([task.complete() for task in requirements]) and all([i.exists() for i in inputs])
+            is_completed = is_completed and all([task.complete() for task in requirements]) and all(
+                [i.exists() for i in inputs])
 
         if not self.modification_time_check or not is_completed or not self.input():
             return is_completed
@@ -102,12 +114,15 @@ class TaskOnKart(luigi.Task):
         return self._check_modification_time()
 
     def _check_modification_time(self):
-        common_path = set(t.path() for t in luigi.task.flatten(self.input())) & set(t.path() for t in luigi.task.flatten(self.output()))
+        common_path = set(t.path() for t in luigi.task.flatten(self.input())) & set(
+            t.path() for t in luigi.task.flatten(self.output()))
         input_tasks = [t for t in luigi.task.flatten(self.input()) if t.path() not in common_path]
         output_tasks = [t for t in luigi.task.flatten(self.output()) if t.path() not in common_path]
 
-        input_modification_time = max([target.last_modification_time() for target in input_tasks]) if input_tasks else None
-        output_modification_time = min([target.last_modification_time() for target in output_tasks]) if output_tasks else None
+        input_modification_time = max(
+            [target.last_modification_time() for target in input_tasks]) if input_tasks else None
+        output_modification_time = min(
+            [target.last_modification_time() for target in output_tasks]) if output_tasks else None
 
         if input_modification_time is None or output_modification_time is None:
             return True
@@ -131,27 +146,30 @@ class TaskOnKart(luigi.Task):
 
         return cls(**new_k)
 
-    def make_target(self, relative_file_path: str, use_unique_id: bool = True, processor: Optional[FileProcessor] = None) -> TargetOnKart:
+    def make_target(self, relative_file_path: str, use_unique_id: bool = True,
+                    processor: Optional[FileProcessor] = None) -> TargetOnKart:
         file_path = os.path.join(self.workspace_directory, relative_file_path)
         unique_id = self.make_unique_id() if use_unique_id else None
-        return gokart.target.make_target(file_path=file_path,
-                                         unique_id=unique_id,
-                                         processor=processor,
-                                         redis_host=self.redis_host,
-                                         redis_port=self.redis_port,
-                                         redis_timeout=self.redis_timeout)
+        return gokart.target.target_on_kart.make_target(file_path=file_path,
+                                                        unique_id=unique_id,
+                                                        processor=processor,
+                                                        redis_host=self.redis_host,
+                                                        redis_port=self.redis_port,
+                                                        redis_timeout=self.redis_timeout)
 
-    def make_large_data_frame_target(self, relative_file_path: str, use_unique_id: bool = True, max_byte=int(2**26)) -> TargetOnKart:
+    def make_large_data_frame_target(self, relative_file_path: str, use_unique_id: bool = True,
+                                     max_byte=int(2 ** 26)) -> TargetOnKart:
         file_path = os.path.join(self.workspace_directory, relative_file_path)
         unique_id = self.make_unique_id() if use_unique_id else None
-        return gokart.target.make_model_target(file_path=file_path,
-                                               temporary_directory=self.local_temporary_directory,
-                                               unique_id=unique_id,
-                                               save_function=gokart.target.LargeDataFrameProcessor(max_byte=max_byte).save,
-                                               load_function=gokart.target.LargeDataFrameProcessor.load,
-                                               redis_host=self.redis_host,
-                                               redis_port=self.redis_port,
-                                               redis_timeout=self.redis_timeout)
+        return gokart.target.target_on_kart.make_model_target(file_path=file_path,
+                                                              temporary_directory=self.local_temporary_directory,
+                                                              unique_id=unique_id,
+                                                              save_function=gokart.target_on_kart.LargeDataFrameProcessor(
+                                                                  max_byte=max_byte).save,
+                                                              load_function=gokart.target_on_kart.LargeDataFrameProcessor.load,
+                                                              redis_host=self.redis_host,
+                                                              redis_port=self.redis_port,
+                                                              redis_timeout=self.redis_timeout)
 
     def make_model_target(self,
                           relative_file_path: str,
@@ -169,14 +187,14 @@ class TaskOnKart(luigi.Task):
         file_path = os.path.join(self.workspace_directory, relative_file_path)
         assert relative_file_path[-3:] == 'zip', f'extension must be zip, but {relative_file_path} is passed.'
         unique_id = self.make_unique_id() if use_unique_id else None
-        return gokart.target.make_model_target(file_path=file_path,
-                                               temporary_directory=self.local_temporary_directory,
-                                               unique_id=unique_id,
-                                               save_function=save_function,
-                                               load_function=load_function,
-                                               redis_host=self.redis_host,
-                                               redis_port=self.redis_port,
-                                               redis_timeout=self.redis_timeout)
+        return gokart.target.target_on_kart.make_model_target(file_path=file_path,
+                                                              temporary_directory=self.local_temporary_directory,
+                                                              unique_id=unique_id,
+                                                              save_function=save_function,
+                                                              load_function=load_function,
+                                                              redis_host=self.redis_host,
+                                                              redis_port=self.redis_port,
+                                                              redis_timeout=self.redis_timeout)
 
     def load(self, target: Union[None, str, TargetOnKart] = None) -> Any:
         def _load(targets):
@@ -216,7 +234,8 @@ class TaskOnKart(luigi.Task):
         required_columns = required_columns or set()
         if data.empty and len(data.index) == 0 and len(required_columns - set(data.columns)) > 0:
             return pd.DataFrame(columns=required_columns)
-        assert required_columns.issubset(set(data.columns)), f'data must have columns {required_columns}, but actually have only {data.columns}.'
+        assert required_columns.issubset(
+            set(data.columns)), f'data must have columns {required_columns}, but actually have only {data.columns}.'
         if drop_columns:
             data = data[required_columns]
         return data
@@ -321,7 +340,7 @@ class TaskOnKart(luigi.Task):
     def _get_random_seed(self):
         if self.fix_random_seed_value:
             return self.fix_random_seed_value
-        return int(self.make_unique_id(), 16) % (2**32 - 1)  # maximum numpy.random.seed
+        return int(self.make_unique_id(), 16) % (2 ** 32 - 1)  # maximum numpy.random.seed
 
     @luigi.Task.event_handler(luigi.Event.START)
     def _dump_task_params(self):

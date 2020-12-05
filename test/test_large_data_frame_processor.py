@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from gokart.target import LargeDataFrameProcessor
+from gokart.target.target_on_kart import LargeDataFrameProcessor
 
 
 def _get_temporary_directory():

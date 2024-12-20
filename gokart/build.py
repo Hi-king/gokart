@@ -33,7 +33,9 @@ class LoggerConfig:
 
 
 class GokartBuildError(Exception):
-    pass
+    def __init__(self, messsage, raised_exceptions: dict[str, list[Exception]]):
+        super().__init__(messsage)
+        self.raised_exceptions = raised_exceptions
 
 
 class HasLockedTaskException(Exception):
@@ -43,31 +45,6 @@ class HasLockedTaskException(Exception):
 class TaskLockExceptionRaisedFlag:
     def __init__(self):
         self.flag: bool = False
-
-
-class WorkerProtocol(Protocol):
-    """Protocol for Worker.
-    This protocol is determined by luigi.worker.Worker.
-    """
-
-    def add(self, task: TaskOnKart) -> bool: ...
-
-    def run(self) -> bool: ...
-
-    def __enter__(self) -> 'WorkerProtocol': ...
-
-    def __exit__(self, type, value, traceback) -> Literal[False]: ...
-
-
-class WorkerSchedulerFactory:
-    def create_local_scheduler(self) -> scheduler.Scheduler:
-        return scheduler.Scheduler(prune_on_get_work=True, record_task_history=False)
-
-    def create_remote_scheduler(self, url) -> rpc.RemoteScheduler:
-        return rpc.RemoteScheduler(url)
-
-    def create_worker(self, scheduler: scheduler.Scheduler, worker_processes: int, assistant=False) -> WorkerProtocol:
-        return worker.Worker(scheduler=scheduler, worker_processes=worker_processes, assistant=assistant)
 
 
 def _get_output(task: TaskOnKart[T]) -> T:
@@ -133,31 +110,27 @@ def build(
     """
     if reset_register:
         _reset_register()
-
     with LoggerConfig(level=log_level):
         task_lock_exception_raised = TaskLockExceptionRaisedFlag()
+        raised_exceptions: dict[str, list[Exception]] = dict()
 
         @TaskOnKart.event_handler(luigi.Event.FAILURE)
         def when_failure(task, exception):
             if isinstance(exception, TaskLockException):
                 task_lock_exception_raised.flag = True
+            else:
+                raised_exceptions.setdefault(task.make_unique_id(), []).append(exception)
 
         @backoff.on_exception(
             partial(backoff.expo, max_value=task_lock_exception_max_wait_seconds), HasLockedTaskException, max_tries=task_lock_exception_max_tries
         )
         def _build_task():
             task_lock_exception_raised.flag = False
-            result = luigi.build(
-                [task],
-                local_scheduler=True,
-                detailed_summary=True,
-                log_level=logging.getLevelName(log_level),
-                **env_params,
-            )
+            result = luigi.build([task], local_scheduler=True, detailed_summary=True, log_level=logging.getLevelName(log_level), **env_params)
             if task_lock_exception_raised.flag:
                 raise HasLockedTaskException()
             if result.status == luigi.LuigiStatusCode.FAILED:
-                raise GokartBuildError(result.summary_text)
+                raise GokartBuildError(result.summary_text, raised_exceptions=raised_exceptions)
             return _get_output(task) if return_value else None
 
         return _build_task()
